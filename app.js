@@ -251,7 +251,9 @@ app.post('/upload_video', upload, async (req, res) => {
 
       const merchant_id = decoded._id;
       const title = req.body.title;
+      console.log("hello1" );
       const file_name = req.file.filename;
+      console.log("hello2" );
       const uploaded_at = Date.now();
       await Videos.create({ merchant_id, title, file_name, uploaded_at });
     });
@@ -337,8 +339,6 @@ app.post('/client_signin', async (req, res) => {
         message: 'signin failed.',
       });
     }
-
-
   } catch (err) {
     console.log("/merchant_signin error: " + err);
     return res.status(400).json({
