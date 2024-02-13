@@ -22,15 +22,25 @@ const merchantsSchema = {
   password: String,
   contact_phone: String,
   contact_email: String,
-  signedup_at: Date
+  signedup_at: {
+    type: Date,
+    default: Date.now
+  }
 };
 const Merchants = mongoose.model('merchants', merchantsSchema);
 
 const videosSchema = {
-  merchant_id: String,
+  merchant_id: {
+    type: String,
+    ref: 'Merchant', // Refers to the 'Merchant' model/collection
+    required: true
+  },
   title: String,
   file_name: String,
-  uploaded_at: Date
+  uploaded_at: {
+    type: Date,
+    default: Date.now
+  }
 };
 const Videos = mongoose.model('videos', videosSchema);
 
@@ -38,10 +48,32 @@ const clientsSchema = {
   full_name: String,
   user_name: String,
   password: String,
-  signedup_at: Date
+  signedup_at: {
+    type: Date,
+    default: Date.now
+  }
 };
-
 const Clients = mongoose.model('clients', clientsSchema);
+
+const purchasedVideosSchema = {
+  client_id: {
+    type: String,
+    ref: 'Clients', // Refers to the 'Videos' model/collection
+    required: true
+  },
+  video_id: {
+    type: String,
+    ref: 'Videos', // Refers to the 'Videos' model/collection
+    required: true
+  },
+  purchased_at: {
+    type: Date,
+    default: Date.now
+  }
+};
+const Purchased_Videos = mongoose.model('purchased_videos', purchasedVideosSchema);
+
+
 //Schemas & Models end
 
 // APIs Start
@@ -57,7 +89,6 @@ app.post('/merchant_signup', async (req, res) => {
         message: 'merchant exists.'
       });
     }
-    const signedup_at = Date.now();
 
     if (!full_name || !user_name || !password || !contact_phone) {
       return res.status(400).json({
@@ -66,7 +97,7 @@ app.post('/merchant_signup', async (req, res) => {
       });
     }
     const contact_email = user_name;
-    await Merchants.create({ full_name, user_name, password, contact_phone, contact_email, signedup_at });
+    await Merchants.create({ full_name, user_name, password, contact_phone, contact_email });
     return res.status(200).json({
       status_code: 200,
       message: 'merchant created.'
@@ -154,26 +185,32 @@ app.get("/view_merchant_own_profile", async (req, res) => {
           message: 'unauthorized user.'
         });
       }
-      const _id = decoded._id;
-      const merchant = await Merchants.findOne({ _id }, viewMerchantOwnProfileProjection);
-      //console.log("merchant: " + merchant);
-      if (merchant) {
-        return res.status(200).json({
-          status_code: 200,
-          message: 'profile found.',
-          data: merchant
-        });
-      } else {
-        console.log(merchant)
-        return res.status(404).json({
-          status_code: 404,
-          message: 'profile not found.',
+
+      try {
+        const _id = decoded._id;
+        const merchant = await Merchants.findOne({ _id }, viewMerchantOwnProfileProjection);
+        //console.log("merchant: " + merchant);
+        if (merchant) {
+          return res.status(200).json({
+            status_code: 200,
+            message: 'profile found.',
+            data: merchant
+          });
+        } else {
+          console.log(merchant)
+          return res.status(404).json({
+            status_code: 404,
+            message: 'profile not found.',
+          });
+        }
+      } catch (err) {
+        console.log("/view_merchant_own_profile error: " + err);
+        return res.status(400).json({
+          status_code: 400,
+          message: 'something went wrong',
         });
       }
     });
-
-
-
   } catch (err) {
     console.log("/view_merchant_own_profile error: " + err);
     return res.status(400).json({
@@ -238,32 +275,38 @@ app.post('/upload_video', upload, async (req, res) => {
           message: 'unauthorized user.'
         });
       }
-      if (!req.body.title || !req.file.fieldname || !req.file) {
+      try {
+        if (!req.body.title || !req.file.fieldname || !req.file) {
+          return res.status(400).json({
+            status_code: 400,
+            message: 'title and video required.'
+          });
+        }
+
+        const merchant_id = decoded._id;
+        const title = req.body.title;
+        const file_name = req.file.filename;
+        await Videos.create({ merchant_id, title, file_name });
+
+        return res.status(200).json({
+          status_code: 200,
+          message: 'upload successful.'
+        });
+      } catch (err) {
+        console.log("/upload Error: " + err)
         return res.status(400).json({
           status_code: 400,
-          message: 'title and video required.'
+          message: 'something went wrong.'
         });
       }
-
-      console.log("FileName: " + req.file.filename);
-
-
-
-      const merchant_id = decoded._id;
-      const title = req.body.title;
-      console.log("hello1" );
-      const file_name = req.file.filename;
-      console.log("hello2" );
-      const uploaded_at = Date.now();
-      await Videos.create({ merchant_id, title, file_name, uploaded_at });
     });
-
-
-    return res.status(200).json({
-      status_code: 200,
-      message: 'upload successful.'
+  } catch (err) {
+    console.log("/upload Error: " + err)
+    return res.status(400).json({
+      status_code: 400,
+      message: 'something went wrong.'
     });
-  } catch (err) { console.log("/upload Error: " + err) }
+  }
 
 });
 // Upload video ends
@@ -279,7 +322,7 @@ app.post('/client_signup', async (req, res) => {
         message: 'client exists.'
       });
     }
-    
+
     const signedup_at = Date.now();
 
     if (!full_name || !user_name || !password) {
@@ -289,13 +332,13 @@ app.post('/client_signup', async (req, res) => {
       });
     }
 
-    await Clients.create({ full_name, user_name, password, signedup_at });
+    await Clients.create({ full_name, user_name, password });
     return res.status(200).json({
       status_code: 200,
       message: 'client created.'
     });
   } catch (err) {
-    console.log("/merchant_signup exception: " + err)
+    console.log("/client_signup exception: " + err)
     return res.status(400).json({
       status_code: 400,
       message: 'something went wrong.',
@@ -347,10 +390,195 @@ app.post('/client_signin', async (req, res) => {
     });
   }
 });
-// Merchant signin ends
+// Client signin ends
+
+// client_purchase_video starts
+app.post('/client_purchase_video', async (req, res) => {
+  try {
+    if (!req.headers.authorization) {
+      return res.status(401).json({
+        status_code: 401,
+        message: 'unauthorized user.'
+      });
+    }
+
+    const token = req.headers.authorization.split(' ')[1];
+    //console.log("Token:" + token);
+    jwt.verify(token, 'your_secret_key', async (err, decoded) => {
+      if (err) {
+        //console.log("view_merchant_own_profile 401:" + err);
+        return res.status(401).json({
+          status_code: 401,
+          message: 'unauthorized user.'
+        });
+      }
+      try {
+        if (!req.body.video_id) {
+          return res.status(400).json({
+            status_code: 400,
+            message: 'video_id required.'
+          });
+        }
+
+        const client_id = decoded._id;
+        const video_id = req.body.video_id;
+        const alreadyPurchased = await Purchased_Videos.findOne({ client_id, video_id });
+        if (alreadyPurchased) {
+          return res.status(409).json({
+            status_code: 409,
+            message: 'already purchased.'
+          });
+        }
+        await Purchased_Videos.create({ client_id, video_id });
+
+        return res.status(200).json({
+          status_code: 200,
+          message: 'purchase successful.'
+        });
+      } catch (err) {
+        console.log("/upload Error: " + err)
+        return res.status(400).json({
+          status_code: 400,
+          message: 'something went wrong.'
+        });
+      }
+    });
+  } catch (err) {
+    console.log("/upload Error: " + err)
+    return res.status(400).json({
+      status_code: 400,
+      message: 'something went wrong.'
+    });
+  }
+
+});
+// client_purchase_video ends
+
+// client_purchased_video_list starts
+const clientPurchasedVideoListProjection = {
+  _id: 0,
+  client_id: 0
+};
+
+app.get("/client_purchased_video_list", async (req, res) => {
+  try {
+    if (!req.headers.authorization) {
+      return res.status(401).json({
+        status_code: 401,
+        message: 'unauthorized user.'
+      });
+    }
+    const token = req.headers.authorization.split(' ')[1];
+    //console.log("Token:" + token);
+    jwt.verify(token, 'your_secret_key', async (err, decoded) => {
+      if (err) {
+        //console.log("client_purchase_video_list 401:" + err);
+        return res.status(401).json({
+          status_code: 401,
+          message: 'unauthorized user.'
+        });
+      }
+
+      try {
+        const client_id = decoded._id;
+        const clientPurchasedVideoList = await Purchased_Videos.find({ client_id }, clientPurchasedVideoListProjection);
+        //console.log("clientPurchaseVideoList: " + clientPurchaseVideoList);
+        if (clientPurchasedVideoList) {
+          return res.status(200).json({
+            status_code: 200,
+            message: 'videos found.',
+            data: clientPurchasedVideoList
+          });
+        } else {
+          //console.log(clientPurchasedVideoList)
+          return res.status(404).json({
+            status_code: 404,
+            message: 'no video found.',
+          });
+        }
+      } catch (err) {
+        console.log("/client_purchased_video_list error: " + err);
+        return res.status(400).json({
+          status_code: 400,
+          message: 'something went wrong',
+        });
+      }
+    });
+  } catch (err) {
+    console.log("/client_purchased_video_list error: " + err);
+    return res.status(400).json({
+      status_code: 400,
+      message: 'something went wrong',
+    });
+  }
+});
+// client_purchased_video_list ends
+
+// client_purchased_video_detail starts
+const clientPurchasedVideoDetailProjection = {
+  _id: 0,
+  merchant_id: 0
+};
+
+app.get("/client_purchased_video_detail", async (req, res) => {
+  try {
+    if (!req.headers.authorization) {
+      return res.status(401).json({
+        status_code: 401,
+        message: 'unauthorized user.'
+      });
+    }
+    const token = req.headers.authorization.split(' ')[1];
+    //console.log("Token:" + token);
+    jwt.verify(token, 'your_secret_key', async (err, decoded) => {
+      if (err) {
+        //console.log("client_purchased_video_detail 401:" + err);
+        return res.status(401).json({
+          status_code: 401,
+          message: 'unauthorized user.'
+        });
+      }
+
+      try {
+        //const client_id = decoded._id;
+        const _id = req.query.video_id;
+        console.log("query _id: " +_id);
+        const clientPurchasedVideoDetail = await Videos.findOne({ _id}, clientPurchasedVideoDetailProjection);
+        //console.log("clientPurchasedVideoDetail: " + clientPurchasedVideoDetail);
+        if (clientPurchasedVideoDetail) {
+          return res.status(200).json({
+            status_code: 200,
+            message: 'videos found.',
+            data: clientPurchasedVideoDetail
+          });
+        } else {
+          console.log(clientPurchasedVideoDetail)
+          return res.status(404).json({
+            status_code: 404,
+            message: 'no video found.',
+          });
+        }
+      } catch (err) {
+        console.log("/client_purchased_video_detail DB error: " + err);
+        return res.status(400).json({
+          status_code: 400,
+          message: 'something went wrong',
+        });
+      }
+    });
+  } catch (err) {
+    console.log("/client_purchased_video_detail error: " + err);
+    return res.status(400).json({
+      status_code: 400,
+      message: 'something went wrong',
+    });
+  }
+});
+// client_purchase_video_list ends
+
 
 // APIs End
 
-app.listen(3000, function () {
+app.listen(3000, () => {
   console.log("Server started on port 3000");
 });
